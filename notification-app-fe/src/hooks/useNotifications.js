@@ -1,20 +1,48 @@
 import { useState, useEffect } from "react";
-import { fetchNotifications } from "../apis/notifications";
+import { fetchNotifications } from "../api/notifications";
+import logger from "../utils/logger";
 
-export function useNotifications() {
+export function useNotifications(limit = 10, page = 1, filter = "All") {
   const [notifications, setNotifications] = useState([]);
-  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
+    let isMounted = true;
+
     const load = async () => {
-      const data = await fetchNotifications();
-      setNotifications(data.notifications ?? []);
+      setLoading(true);
+      setError(null);
+      logger.info("Hook initiating fetch", { limit, page, filter });
+
+      try {
+        const data = await fetchNotifications(limit, page, filter);
+        
+        if (isMounted) {
+          // BULLETPROOF FIX: Safely check if data exists before looking for .notifications
+          const validData = Array.isArray(data) ? data : (data?.notifications || []);
+          setNotifications(validData);
+          setTotalPages(5); 
+        }
+      } catch (err) {
+        if (isMounted) {
+          setError(err.message);
+          logger.error("Hook encountered error during fetch", err.message);
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
     };
 
     load();
-  }, [notifications]);
 
-  const totalPages = 0;
+    return () => {
+      isMounted = false;
+    };
+  }, [limit, page, filter]);
 
-  return { notifications, total, totalPages, loading: false, error: true };
+  return { notifications, totalPages, loading, error };
 }
